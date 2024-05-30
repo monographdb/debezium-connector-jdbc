@@ -50,6 +50,7 @@ public class JdbcChangeEventSink implements ChangeEventSink {
     private final StatelessSession session;
     private final TableNamingStrategy tableNamingStrategy;
     private final RecordWriter recordWriter;
+    private Map<TableId, TableDescriptor> tableDescriptorCache = new HashMap<>();
 
     public JdbcChangeEventSink(JdbcSinkConnectorConfig config, StatelessSession session, DatabaseDialect dialect, RecordWriter recordWriter) {
 
@@ -105,7 +106,18 @@ public class JdbcChangeEventSink implements ChangeEventSink {
                 flushBuffers(deleteBufferByTable);
 
                 try {
-                    final TableDescriptor table = checkAndApplyTableChangesIfNeeded(tableId, sinkRecordDescriptor);
+
+                    final TableDescriptor table;
+
+                    // Check if the table descriptor is cached
+                    if (tableDescriptorCache.containsKey(tableId)) {
+                        table = tableDescriptorCache.get(tableId);
+                    }
+                    else {
+                        // Fetch the table descriptor and cache it
+                        table = checkAndApplyTableChangesIfNeeded(tableId, sinkRecordDescriptor);
+                        tableDescriptorCache.put(tableId, table);
+                    }
                     writeTruncate(dialect.getTruncateStatement(table));
                 }
                 catch (SQLException e) {
@@ -215,7 +227,18 @@ public class JdbcChangeEventSink implements ChangeEventSink {
             LOGGER.debug("Flushing records in JDBC Writer for table: {}", tableId.getTableName());
             try {
                 tableChangesStopwatch.start();
-                final TableDescriptor table = checkAndApplyTableChangesIfNeeded(tableId, toFlush.get(0));
+
+                final TableDescriptor table;
+
+                // Check if the table descriptor is cached
+                if (tableDescriptorCache.containsKey(tableId)) {
+                    table = tableDescriptorCache.get(tableId);
+                }
+                else {
+                    // Fetch the table descriptor and cache it
+                    table = checkAndApplyTableChangesIfNeeded(tableId, toFlush.get(0));
+                    tableDescriptorCache.put(tableId, table);
+                }
                 tableChangesStopwatch.stop();
                 String sqlStatement = getSqlStatement(table, toFlush.get(0));
                 flushBufferStopwatch.start();

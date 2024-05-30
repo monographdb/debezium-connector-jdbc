@@ -41,19 +41,23 @@ public class RecordWriter {
         this.dialect = dialect;
     }
 
-    public void write(List<SinkRecordDescriptor> records, String sqlStatement) {
+    public void write(List<SinkRecordDescriptor> records, String sqlStatement) throws Exception {
 
         Stopwatch writeStopwatch = Stopwatch.reusable();
         writeStopwatch.start();
-        final Transaction transaction = session.beginTransaction();
+        boolean success = false;
 
-        try {
-            session.doWork(processBatch(records, sqlStatement));
-            transaction.commit();
-        }
-        catch (Exception e) {
-            transaction.rollback();
-            throw e;
+        while (!success) {
+            final Transaction transaction = session.beginTransaction();
+
+            try {
+                session.doWork(processBatch(records, sqlStatement));
+                transaction.commit();
+                success = true; // Commit succeeded
+            }
+            catch (Exception e) {
+                transaction.rollback();
+            }
         }
         writeStopwatch.stop();
         LOGGER.trace("[PERF] Total write execution time {}", writeStopwatch.durations());
